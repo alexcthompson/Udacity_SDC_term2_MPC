@@ -6,7 +6,7 @@
 using CppAD::AD;
 
 // TODO: Set the timestep length and duration
-size_t N = 10;
+size_t N = 2;
 double dt = 0.1;
 
 // This value assumes the model presented in the classroom is used.
@@ -21,7 +21,7 @@ double dt = 0.1;
 // This is the length from front to CoG that has a similar radius.
 const double Lf = 2.67;
 
-double ref_v = 50;
+double ref_v = 40;
 
 size_t x_start = 0;
 size_t y_start = x_start + N;
@@ -50,7 +50,7 @@ class FG_eval {
             fg[0] += CppAD::pow(vars[epsi_start + step], 2);
             fg[0] += CppAD::pow(vars[v_start + step] - ref_v, 2); // velocity error
         }
-        cout << "checkpoint z3" << endl;
+        cout << "checkpoint z0" << endl;
 
         // miniize use of controls
         for (int step = 0; step < N - 1; step++) {
@@ -80,6 +80,8 @@ class FG_eval {
         // set up motion model
         // for (int step = 1; step < N - 1; step++) {
         for (int step = 1; step < N; step++) {
+            cout << "checkpoint z3" << endl;
+        
             AD<double> x_cur     = vars[x_start + step];
             AD<double> y_cur     = vars[y_start + step];
             AD<double> psi_cur   = vars[psi_start + step];
@@ -87,6 +89,7 @@ class FG_eval {
             AD<double> cte_cur   = vars[cte_start + step];
             AD<double> epsi_cur  = vars[epsi_start + step];
             // actuators not needed for current calculation
+            cout << "checkpoint z4" << endl;
 
             AD<double> x_pre     = vars[x_start + step - 1];
             AD<double> y_pre     = vars[y_start + step - 1];
@@ -97,6 +100,7 @@ class FG_eval {
             // do constrain actuators
             AD<double> delta_pre = vars[delta_start + step - 1];
             AD<double> a_pre     = vars[a_start + step - 1];
+            cout << "checkpoint z5" << endl;
 
             // other
             AD<double> f_pre     = coeffs[0] + coeffs[1] * x_pre + coeffs[2] * CppAD::pow(x_pre, 2)
@@ -142,8 +146,18 @@ vector<double> MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
     //
     // 4 * 10 + 2 * 9
     size_t n_vars = 6 * N + 2 * (N - 1);
-    // TODO: Set the number of constraints
     size_t n_constraints = 6 * N;
+
+    cout << "x_start = " << x_start << endl;
+    cout << "y_start = " << y_start << endl;
+    cout << "psi_start = " << psi_start << endl;
+    cout << "v_start = " << v_start << endl;
+    cout << "cte_start = " << cte_start << endl;
+    cout << "epsi_start = " << epsi_start << endl;
+    cout << "delta_start = " << delta_start << endl;
+    cout << "a_start = " << a_start << endl;
+    cout << "n_vars = " << n_vars << endl;
+    cout << "n_constraints = " << n_constraints << endl;
 
     // Initial value of the independent variables.
     // SHOULD BE 0 besides initial state.
@@ -151,7 +165,9 @@ vector<double> MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
     for (int i = 0; i < n_vars; i++) {
         vars[i] = 0;
     }
-    cout << "checkpoint 1.1" << endl;
+    // cout << "checkpoint 1.1" << endl;
+
+    cout << "state = " << endl << state << endl << endl;
 
     double x    = state[0];
     double y    = state[1];
@@ -182,12 +198,8 @@ vector<double> MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
     // degrees (values in radians).
     // NOTE: Feel free to change this to something else.
     for (int i = delta_start; i < a_start; i++) {
-        // cout << "setting delta min/max" << endl;
-        // cout << i << ": " << vars_lowerbound[i] << ", " << vars_upperbound[i] << endl;
         vars_lowerbound[i] = -0.436332;
         vars_upperbound[i] =  0.436332;
-        // cout << i << ": " << vars_lowerbound[i] << ", " << vars_upperbound[i] << endl;
-
     }
     // cout << "checkpoint 1.2" << endl;
     // cout << "delta_start = " << delta_start << endl;
@@ -222,7 +234,12 @@ vector<double> MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
     constraints_upperbound[cte_start] = cte;
     constraints_upperbound[epsi_start] = epsi;
 
-    cout << "=== constraints ===" << endl;
+    cout << "\n=== lower, var, upper ===" << endl;
+    for (int i = 0; i < n_vars; i++) {
+        cout << i << ": " << vars_lowerbound[i] << ", " << vars[i] << ", " << vars_upperbound[i] << endl;
+    }
+
+    cout << "\n=== constraints ===" << endl;
     for (int i = 0; i < n_constraints; i++) {
         cout << i << ": " << constraints_lowerbound[i] << ", " << constraints_upperbound[i] << endl;
     }
@@ -239,24 +256,24 @@ vector<double> MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
     // options for IPOPT solver
     std::string options;
     // Uncomment this if you'd like more print information
-    options += "Integer print_level  0\n";
-    // NOTE: Setting sparse to true allows the solver to take advantage
-    // of sparse routines, this makes the computation MUCH FASTER. If you
-    // can uncomment 1 of these and see if it makes a difference or not but
-    // if you uncomment both the computation time should go up in orders of
-    // magnitude.
-    options += "Sparse  true        forward\n";
-    options += "Sparse  true        reverse\n";
-    // NOTE: Currently the solver has a maximum time limit of 0.5 seconds.
-    // Change this as you see fit.
-    options += "Numeric max_cpu_time          2.0\n";
+    // options += "Integer print_level  10\n";
+    // // NOTE: Setting sparse to true allows the solver to take advantage
+    // // of sparse routines, this makes the computation MUCH FASTER. If you
+    // // can uncomment 1 of these and see if it makes a difference or not but
+    // // if you uncomment both the computation time should go up in orders of
+    // // magnitude.
+    // options += "Sparse  true        forward\n";
+    // options += "Sparse  true        reverse\n";
+    // // NOTE: Currently the solver has a maximum time limit of 0.5 seconds.
+    // // Change this as you see fit.
+    // options += "Numeric max_cpu_time          2.0\n";
 
     // place to return solution
     CppAD::ipopt::solve_result<Dvector> solution;
     cout << "checkpoint 1.5" << endl;
 
     // Debugging
-    cout << "=== DEBUG ===" << endl;
+    cout << "\n=== vector sizes ===" << endl;
 
     cout << "vars.size() = " << vars.size() << endl;
     cout << "vars_lowerbound = " << vars_lowerbound.size() << endl;

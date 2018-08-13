@@ -120,7 +120,7 @@ int main() {
           cout << coeffs.size() << endl;
 
           cout << "checkpoint 1" << endl;
-          auto res = mpc.Solve(state, coeffs);
+          vector<double> res = mpc.Solve(state, coeffs);
           cout << "checkpoint 2" << endl;
 
           double steer_value = res[0];

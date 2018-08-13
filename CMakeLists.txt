@@ -4,7 +4,7 @@ cmake_minimum_required (VERSION 3.5)
 
 # -g allows for gdb debugging
 # turn on -03 for best performance
-add_definitions(-std=c++11 -g)
+add_definitions(-std=c++11 -fopenmp -g)
 
 set(CXX_FLAGS "-Wall")
 set(CMAKE_CXX_FLAGS "${CXX_FLAGS}")
