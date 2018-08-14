@@ -1,108 +1,51 @@
 # CarND-Controls-MPC
 Self-Driving Car Engineer Nanodegree Program
 
----
+# Code Notes
 
-## Dependencies
+I had a lot of difficulty getting the libraries to function on my laptop, which is a MBP running Yosemite 10.10.5.  There were some very serious issues with Ipopt, partially documented here, and there were very bad interactions with the Yosemite installed Clang.  So `Cmakelist.txt` is somewhat customized.  I found that a friend was able to run the code error free by using the original `Cmakelist.txt` file from the Udacity repo on a machine running Ubuntu, so if there's a problem compiling, try that.  That said, I did try to restore the file to a format where it will compile on Ubuntu.
 
-* cmake >= 3.5
- * All OSes: [click here for installation instructions](https://cmake.org/install/)
-* make >= 4.1(mac, linux), 3.81(Windows)
-  * Linux: make is installed by default on most Linux distros
-  * Mac: [install Xcode command line tools to get make](https://developer.apple.com/xcode/features/)
-  * Windows: [Click here for installation instructions](http://gnuwin32.sourceforge.net/packages/make.htm)
-* gcc/g++ >= 5.4
-  * Linux: gcc / g++ is installed by default on most Linux distros
-  * Mac: same deal as make - [install Xcode command line tools]((https://developer.apple.com/xcode/features/)
-  * Windows: recommend using [MinGW](http://www.mingw.org/)
-* [uWebSockets](https://github.com/uWebSockets/uWebSockets)
-  * Run either `install-mac.sh` or `install-ubuntu.sh`.
-  * If you install from source, checkout to commit `e94b6e1`, i.e.
-    ```
-    git clone https://github.com/uWebSockets/uWebSockets
-    cd uWebSockets
-    git checkout e94b6e1
-    ```
-    Some function signatures have changed in v0.14.x. See [this PR](https://github.com/udacity/CarND-MPC-Project/pull/3) for more details.
+# Implementation
 
-* **Ipopt and CppAD:** Please refer to [this document](https://github.com/udacity/CarND-MPC-Project/blob/master/install_Ipopt_CppAD.md) for installation instructions.
-* [Eigen](http://eigen.tuxfamily.org/index.php?title=Main_Page). This is already part of the repo so you shouldn't have to worry about it.
-* Simulator. You can download these from the [releases tab](https://github.com/udacity/self-driving-car-sim/releases).
-* Not a dependency but read the [DATA.md](./DATA.md) for a description of the data sent back from the simulator.
+For the model, I followed the basic direction suggested by Udacity.  Once it was up and running, I spent a lot of time tuning the cost function to get the MPC to do what I wanted: drive smoothly and fast without leaving the track.  I made some modifications including changing the exponents of the weights, and adding a new cost element.
 
+## The Model
 
-## Basic Build Instructions
+The model follows the basic motion model articulated in the course.  The six state elements - `x`, `y`, `psi`, `v`, `cte`, and `epsi` (the `psi` error) are modeled, including the effects of the steering actuator (`delta`) and the accelerator actuator (`a`).
 
-1. Clone this repo.
-2. Make a build directory: `mkdir build && cd build`
-3. Compile: `cmake .. && make`
-4. Run it: `./mpc`.
+This model is given over the solver with two sets of constraints and a cost function:
 
-## Tips
+- Constraints describing how the motion model leads from one timestep to the next.  I made no changes to this from the standard Udacity model.
+- Constraints describing the upper and lower bounds, or tolerance, for variation.  For the state elements, these are set to `0`, whereas for the actuators, they are set to the range of the actuators.
+  + In this case, I kept the range for steering at `+/- 25 degrees`.
+  + However, I did change the range of the accelerator, from the standard `[-1, 1]` to `[-0.5, 0.3]`.  I found that allowing the acceleration to go higher than 0.3 contributed to a tendency for the vehicle to leave the track in curves.  I also found that allowing the vehicle to brake harder than it accelerated helped keep it on the track in the curves.
+- A cost function taking in various elements.  I modified the cost function in the following ways from typical:
+  + For each cost element I added a coefficient, so I could weight them according to their importance.  Tuning these weights was critical to getting the vehicle to drive the track.  Since some variables were generally in the range `[-0.1, 0.1]` and others were generally in the range `[-1, 1]`, applying exponents to these could lead to very different values.
+  + To tune these, I made an educated guess at values that would balance the elements, and then tuned them via adhoc twiddling.
+  + I found that the most important term by far was `epsi` component of the cost function.  If you can get the vehicle to adopt the direction of the fitted polynomial, this tends to lead to a smooth line.
+  + For the error terms coming from `cte`, `epsi`, and change in `delta`, I raised the terms to the 4th power.  I found that, because `f(x) = x^4` is a forms a broad, flatish valley near zero, but has steep sides, applying this exponent to these terms had the effect of giving the solver latitude in setting these values, so long as they were within a certain range of zero.  In a sense, moreso than with 2nd powers, it allowed the solver to "choose a racing line" that was not dead center.
+  + I also added the `D`-factor from the PID controller: the square of the change in CTE.  This factor helped to dampen oscillations that built up.
 
-1. It's recommended to test the MPC on basic examples to see if your implementation behaves as desired. One possible example
-is the vehicle starting offset of a straight line (reference). If the MPC implementation is correct, after some number of timesteps
-(not too many) it should find and track the reference line.
-2. The `lake_track_waypoints.csv` file has the waypoints of the lake track. You could use this to fit polynomials and points and see of how well your model tracks curve. NOTE: This file might be not completely in sync with the simulator so your solution should NOT depend on it.
-3. For visualization this C++ [matplotlib wrapper](https://github.com/lava/matplotlib-cpp) could be helpful.)
-4.  Tips for setting up your environment are available [here](https://classroom.udacity.com/nanodegrees/nd013/parts/40f38239-66b6-46ec-ae68-03afd8a601c8/modules/0949fca6-b379-42af-a919-ee50aa304e6a/lessons/f758c44c-5e40-4e01-93b5-1a82aa4e044f/concepts/23d376c7-0195-4276-bdf0-e02f1f3c665d)
-5. **VM Latency:** Some students have reported differences in behavior using VM's ostensibly a result of latency.  Please let us know if issues arise as a result of a VM environment.
+## Timestep length and duration'
 
-## Editor Settings
+I stuck with the suggested duration of 0.1 seconds, in part because it seemed to work fine, and in part because changing it seemed to have implications for solving for latency.
 
-We've purposefully kept editor configuration files out of this repo in order to
-keep it as simple and environment agnostic as possible. However, we recommend
-using the following settings:
+I did play with `N`, however, and found that 20 worked nicely.  I started with `N = 10`, and I found that, as I was searching out suitable values for the cost function, the model tended to perform better as I had it look further ahead.  To get from 10 to 20, I went in steps as my models performed better at low speeds.  Looking 20 steps ahead was a nice balance of looking far enough ahead that the model would not make short term optimizations that were problematic, but also the compute time was reasonable.
 
-* indent using spaces
-* set tab width to 2 spaces (keeps the matrices in source code aligned)
+## Polynomial fitting and MPC Preprocessing
 
-## Code Style
+I took the approach of transforming the waypoints into the vehicle's frame of referenced, and then doing all calculations within that frame of reference.  This was suggested by the Udacity template and indeed seemed to be easier.  I used a 3rd degrees polynomial as I had difficulty with a 4th degree polynomial.
 
-Please (do your best to) stick to [Google's C++ style guide](https://google.github.io/styleguide/cppguide.html).
+### Poly fit issues
 
-## Project Instructions and Rubric
+I found that, once I had the vehicle going around the track, the biggest problem was it jumping off the curves *when the polynomial jumped around near the curves.*  It seems to be the case that there were not really enough waypoints for the polynomial to fit through the curves, and so when a new waypoint was added or dropped, the polynomial would shift suddenly near to the edge of the curve, and this could cause the vehicle to try to adopt a new line.  In so doing, it would often go off the track.  Here's an example image where the polyfit, the yellow line, can potentially send the vehicle off track:
 
-Note: regardless of the changes you make, your project must be buildable using
-cmake and make!
+![poly fit goes off track](./polyline_goes_off_track.png)
 
-More information is only accessible by people who are already enrolled in Term 2
-of CarND. If you are enrolled, see [the project page](https://classroom.udacity.com/nanodegrees/nd013/parts/40f38239-66b6-46ec-ae68-03afd8a601c8/modules/f1820894-8322-4bb3-81aa-b26b3c6dcbaf/lessons/b1ff3be0-c904-438e-aad3-2b5379f0e0c3/concepts/1a2255a0-e23c-44cf-8d41-39b8a3c8264a)
-for instructions and the project rubric.
+My solution was to set conservative MPC parameters that would slow the vehicle down in sections of track where this was a problem.  However, for a real life situation like this, I don't think the MPC is really the problem.  I think the sparsity of the way points and the fitting procedure are more problematic, and I would approach those differently given time.
 
-## Hints!
+## Latency
 
-* You don't have to follow this directory structure, but if you do, your work
-  will span all of the .cpp files here. Keep an eye out for TODOs.
+I took the standard approach to latency.  By adopting `dt = 0.1`, I simply took the actuator settings from the 2nd timestep of the solution (timestep 1 in the indexing, and the first timestep to have actuators settings), and added those as instructions for the simulator.  Since the thread then sleeps for 0.1 seconds, this works out approximately correctly.
 
-## Call for IDE Profiles Pull Requests
-
-Help your fellow students!
-
-We decided to create Makefiles with cmake to keep this project as platform
-agnostic as possible. Similarly, we omitted IDE profiles in order to we ensure
-that students don't feel pressured to use one IDE or another.
-
-However! I'd love to help people get up and running with their IDEs of choice.
-If you've created a profile for an IDE that you think other students would
-appreciate, we'd love to have you add the requisite profile files and
-instructions to ide_profiles/. For example if you wanted to add a VS Code
-profile, you'd add:
-
-* /ide_profiles/vscode/.vscode
-* /ide_profiles/vscode/README.md
-
-The README should explain what the profile does, how to take advantage of it,
-and how to install it.
-
-Frankly, I've never been involved in a project with multiple IDE profiles
-before. I believe the best way to handle this would be to keep them out of the
-repo root to avoid clutter. My expectation is that most profiles will include
-instructions to copy files to a new location to get picked up by the IDE, but
-that's just a guess.
-
-One last note here: regardless of the IDE used, every submitted project must
-still be compilable with cmake and make./
-
-## How to write a README
-A well written README file can enhance your project and portfolio.  Develop your abilities to create professional README files by completing [this free course](https://www.udacity.com/course/writing-readmes--ud777).
+I think there are improvements to be made here, mainly by tracking what actuator commands are in the pipeline, and modeling the impact of those forward in the MPC process.  However, for this project, the above approach was sufficient.
