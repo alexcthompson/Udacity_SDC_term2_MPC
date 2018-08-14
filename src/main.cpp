@@ -12,6 +12,12 @@
 // for convenience
 using json = nlohmann::json;
 
+// previous actuations and constants
+double prev_delta = 0.0;
+double prev_a     = 0.0;
+const double Lf = 2.67;
+double dt_ = 0.1;
+
 // For converting back and forth between radians and degrees.
 constexpr double pi() { return M_PI; }
 double deg2rad(double x) { return x * pi() / 180; }
@@ -93,15 +99,28 @@ int main() {
           double psi = j[1]["psi"];
           double v = j[1]["speed"];
 
+          // predict forward 1 step with prev_delta and prev_a
+          double next_px  = px + dt_ * v * cos(psi);
+          double next_py  = py + dt_ * v * sin(psi);
+          double next_psi = psi - v * prev_delta * dt_ / Lf;
+          double next_v   = v + prev_a * dt_;
+
+          cout << "prev_delta    = " << prev_delta << endl;
+          cout << "prev_a        = " << prev_a << endl;
+          cout << "px, next_px   = " << px << ", " << next_px << endl;
+          cout << "py, next_py   = " << py << ", " << next_py << endl;
+          cout << "psi, next_psi = " << psi << ", " << next_psi << endl;
+          cout << "v, next_v     = " << v << ", " << next_v << endl;
+
           // translate waypoints into vehicle space
           Eigen::VectorXd xpts_vehicle = Eigen::VectorXd(ptsx.size());
           Eigen::VectorXd ypts_vehicle = Eigen::VectorXd(ptsy.size());
 
           for (int i = 0; i < ptsx.size(); i++) {
-            double x_translated = ptsx[i] - px;
-            double y_translated = ptsy[i] - py;
-            xpts_vehicle[i] = x_translated * cos(-psi) - y_translated * sin(-psi);
-            ypts_vehicle[i] = x_translated * sin(-psi) + y_translated * cos(-psi);
+            double x_translated = ptsx[i] - next_px;
+            double y_translated = ptsy[i] - next_py;
+            xpts_vehicle[i] = x_translated * cos(-next_psi) - y_translated * sin(-next_psi);
+            ypts_vehicle[i] = x_translated * sin(-next_psi) + y_translated * cos(-next_psi);
           }
 
           // fit the way points
@@ -115,14 +134,19 @@ int main() {
           double cte  = -coeffs[0];
           double epsi = -atan(coeffs[1]);
 
-          state << x_state, y_state, psi_state, v, cte, epsi;
+          state << x_state, y_state, psi_state, next_v, cte, epsi;
+          cout << "cte = " << cte << endl;
+          cout << "epsi = " << epsi << endl;
 
           // Solve it
           vector<double> res = mpc.Solve(state, coeffs);
 
           // Controls
           double steer_value = res[0];
+          prev_delta = steer_value;
+
           double throttle_value = res[1];
+          prev_a = throttle_value;
 
           json msgJson;
           // NOTE: Remember to divide by deg2rad(25) before you send the steering value back.

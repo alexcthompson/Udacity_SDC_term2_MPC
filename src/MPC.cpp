@@ -21,7 +21,7 @@ double dt = 0.1;
 // This is the length from front to CoG that has a similar radius.
 const double Lf = 2.67;
 
-double ref_v = 80;
+double ref_v = 30;
 
 size_t x_start = 0;
 size_t y_start = x_start + N;
@@ -45,14 +45,14 @@ class FG_eval {
 
         // loop over states to add up cost
         for (int step = 0; step < N; step++) {
-            fg[0] += 2000 * CppAD::pow(vars[cte_start + step], 4);
-            fg[0] += 6000 * CppAD::pow(vars[epsi_start + step], 4);
+            fg[0] += 400 * CppAD::pow(vars[cte_start + step], 4);
+            fg[0] += 4000 * CppAD::pow(vars[epsi_start + step], 4);
             fg[0] += 1.0 * CppAD::pow(vars[v_start + step] - ref_v, 2);
         }
 
         // minimize use of controls
         for (int step = 0; step < N - 1; step++) {
-            fg[0] += 400 * CppAD::pow(vars[delta_start + step], 2);
+            fg[0] += 300 * CppAD::pow(vars[delta_start + step], 2);
             fg[0] += 20 * CppAD::pow(vars[a_start + step], 2);
 
             // add cost for closing the distance too quickly
@@ -61,7 +61,7 @@ class FG_eval {
 
         // minimize change in controls
         for (int step = 0; step < N - 2; step++) {
-            fg[0] += 2000 * CppAD::pow(vars[delta_start + step + 1] - vars[delta_start + step], 4);
+            fg[0] += 600 * CppAD::pow(vars[delta_start + step + 1] - vars[delta_start + step], 4);
             fg[0] += 600 * CppAD::pow(vars[a_start     + step + 1] - vars[a_start     + step], 2);
         }
 
